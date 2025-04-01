@@ -62,7 +62,13 @@ void loop() {
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
 
-    Serial.print(ypr);
+    Serial.print("[");
+    Serial.print(ypr[0]/ M_PI);
+    Serial.print(",");
+    Serial.print(ypr[1]/ M_PI);
+    Serial.print(",");
+    Serial.print(ypr[2]/ M_PI);
+    Serial.println("]");
   }
 
 
