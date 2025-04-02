@@ -8,6 +8,11 @@ MUX_CHANNELS = [0, 1, 2]
 MPU_ADDR = 0x68
 bus = smbus2.SMBus(1)
 
+min_stable_times = [None, None, None]
+max_stable_times = [None, None, None]
+
+
+
 def select_mux_channel(channel):
     try:
         bus.write_byte(MUX_ADDR, 1 << channel)
@@ -51,6 +56,7 @@ for idx, channel in enumerate(MUX_CHANNELS):
     min_vals.append(initial)
 
 # Main loop: Read each sensor, update min, and normalize output from 0 to 100
+
 while True:
     normalized_positions = []
     for idx, channel in enumerate(MUX_CHANNELS):
@@ -63,9 +69,25 @@ while True:
             if idx == 2:  # Invert third sensor reading
                 current = -current
 
-        # Update the minimum value observed
+        # --- Debounced MIN update ---
         if current < min_vals[idx]:
-            min_vals[idx] = current
+            if min_stable_times[idx] is None:
+                min_stable_times[idx] = time.time()
+            elif time.time() - min_stable_times[idx] > 1.0:
+                min_vals[idx] = current
+                min_stable_times[idx] = None
+        else:
+            min_stable_times[idx] = None
+
+        # --- Debounced MAX update ---
+        if current > max_vals[idx]:
+            if max_stable_times[idx] is None:
+                max_stable_times[idx] = time.time()
+            elif time.time() - max_stable_times[idx] > 1.0:
+                max_vals[idx] = current
+                max_stable_times[idx] = None
+        else:
+            max_stable_times[idx] = None
 
         # Calculate normalized position:
         # If current equals startup value (max_vals[idx]), output 100.
@@ -74,7 +96,7 @@ while True:
         if diff == 0:
             norm = 100
         else:
-            norm = ((current - min_vals[idx]) / diff) * 105
+            norm = ((current - min_vals[idx]) / diff) * 110
 
         normalized_positions.append(round(norm, 2))
     print(normalized_positions)
