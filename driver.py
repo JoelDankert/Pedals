@@ -52,7 +52,6 @@ def stream_pedal_data(lock):
         for line in iter(stdout.readline, ""):
             try:
                 values = ast.literal_eval(line.strip())
-                print(values)
                 if isinstance(values, list) and len(values) == 3:
                     with lock:
                         gas, bremse, kupplung = values
@@ -122,9 +121,11 @@ def map_to_axis(value):
 
 
 def map_to_axis_two(value):
+    value += 10
     value = min(value, 100)
     value = max(value, 0)
     value /= 100
+    value = 1 - value
     return int(value * 32767)
 
 
