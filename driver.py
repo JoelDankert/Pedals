@@ -18,6 +18,7 @@ PI_HOST = "raspihole.local"         # or use IP like "192.168.0.100"
 PI_USER = "ukii"
 PI_PASSWORD = "amogus"             # Or use SSH key
 REMOTE_SCRIPT = "/home/ukii/pedale/main.py"
+PEDAL_SMOOTHING = 0.5  # 0 = no smoothing, 1 = full smoothing (recommended range: 0.1 - 0.5)
 
 # === CONNECT SERIAL ===
 print("Connecting to serial...")
@@ -138,7 +139,7 @@ def map_to_axis(value):
     return int(normalized * 32767)
 
 def map_to_axis_two(value):
-    value += 10
+    value -= 10
     value = min(value, 100)
     value = max(value, 0)
     value /= 100
