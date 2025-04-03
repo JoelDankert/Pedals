@@ -138,13 +138,13 @@ def map_to_axis(value):
     normalized = (value % 360) / 360
     return int(normalized * 32767)
 
-def map_to_axis_two(value):
-    value -= 10
-    value = min(value, 100)
-    value = max(value, 0)
+def map_to_axis_two(value): # 100 - 0
     value /= 100
-    value = 1 - value
+    value = value * 1.2 - 0.1  # stretch range, then shift down
+    value = max(0.0, min(value, 1.0))  # clamp to 0–1
+    value = 1.0 - value  # invert (0 = full press)
     return int(value * 32767)
+
 
 print(Fore.RESET + "Sending joystick input... (Ctrl+C to stop)")
 
