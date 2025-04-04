@@ -36,6 +36,7 @@ TILT_NEG_BUTTON_ID = 2  # button for negative tilt
 def render_progress_bar(name: str, fill: float, marker: float, bar_width: int = 30):
     fill = max(0, min(100, fill))
     marker = max(0, min(100, marker))
+
     fill_length = int(bar_width * fill / 100)
     marker_pos = int(bar_width * marker / 100)
 
@@ -53,8 +54,8 @@ def render_progress_bar(name: str, fill: float, marker: float, bar_width: int = 
         else:
             bar += f"{WHITE_BG} {RESET}"
 
-    # Overwrite full line
-    print(f"{bar} {name}")
+    sys.stdout.write(f"\r{bar} {name}\n")
+    sys.stdout.flush()
   
 
 
@@ -232,6 +233,15 @@ print(Fore.GREEN + "HOLD ALL PEDALS FULLY DOWN FOR 1 SEC TO CALIBRATE")
 time.sleep(2)
 last = time.time()
 i = 0
+
+os.system("cls")
+
+for _ in range(7):
+    print(" ")  # Reserve space for 7 lines (fps + 4 bars + gaps)
+
+sys.stdout.write('\033[?25l')  # Hide cursor
+sys.stdout.flush()
+
 try:
     while True:
         render=False
@@ -239,8 +249,8 @@ try:
         time.sleep(0.001)
         fps = 1 / (time.time() - last + 1e-10)
         if i % 10 == 0: 
-            sys.stdout.write('\033[H\033[J')  # Move to top-left and clear screen
-            sys.stdout.flush()   
+            sys.stdout.write('\033[F' * 6)  # Move up 
+            sys.stdout.flush()
             render=True
             print(Fore.GREEN + f"FPS: {fps:.2f}")
         last = time.time()
@@ -270,4 +280,6 @@ try:
 
 except KeyboardInterrupt:
     print("\nStopped.")
+    sys.stdout.write('\033[?25h')  # Show cursor again
+    sys.stdout.flush()
     ser.close()
