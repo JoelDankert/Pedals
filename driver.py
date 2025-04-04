@@ -19,9 +19,10 @@ PI_USER = "ukii"
 PI_PASSWORD = "amogus"             # Or use SSH key
 REMOTE_SCRIPT = "/home/ukii/pedale/main.py"
 PEDAL_SMOOTHING = 0.8  # 0 = no smoothing, 1 = full smoothing (recommended range: 0.1 - 0.5)
+deadzone = 0.05
 
 # === TILT BUTTON TRIGGER ===
-TILT_THRESHOLD = 5.0  # degrees
+TILT_THRESHOLD = 500.0  # degrees
 tilt_start_angle = None
 tilt_pos_button_held = False
 tilt_neg_button_held = False
@@ -29,6 +30,39 @@ TILT_POS_BUTTON_ID = 1  # button for positive tilt
 TILT_NEG_BUTTON_ID = 2  # button for negative tilt
 
 
+def render_progress_bar(name: str, fill: float, marker: float, bar_width: int = 30):
+    # Clamp values between 0 and 100
+    fill = max(0, min(100, fill))
+    marker = max(0, min(100, marker))
+
+    # Calculate positions
+    fill_length = int(bar_width * fill / 100)
+    marker_pos = int(bar_width * marker / 100)
+
+    # ANSI escape codes for background colors
+    GREEN_BG = '\033[42m'  # Green background
+    WHITE_BG = '\033[47m'  # White background
+    RESET = '\033[0m'
+
+    # Build the bar
+    bar = ""
+    for i in range(bar_width):
+        if i == marker_pos:
+            # Marker with background color depending on fill
+            bg = GREEN_BG if i < fill_length else WHITE_BG
+            bar += f"{bg}|{RESET}"
+        elif i < fill_length:
+            bar += f"{GREEN_BG} {RESET}"
+        else:
+            bar += f"{WHITE_BG} {RESET}"
+
+    # Print result
+    print(f"{bar} {name}")
+
+
+
+
+#beta for sometime
 def handle_tilt_buttons():
     global tilt_start_angle, tilt_pos_button_held, tilt_neg_button_held
 
@@ -110,7 +144,7 @@ def stream_pedal_data(lock):
                         values = ast.literal_eval(line.strip())
                         if isinstance(values, list) and len(values) == 3:
                             with lock:
-                                gas, bremse, kupplung = values
+                                kupplung, bremse, gas = values
                                 smoothed_gas = smooth(smoothed_gas, gas, PEDAL_SMOOTHING)
                                 smoothed_bremse = smooth(smoothed_bremse, bremse, PEDAL_SMOOTHING)
                                 smoothed_kupplung = smooth(smoothed_kupplung, kupplung, PEDAL_SMOOTHING)
@@ -147,7 +181,7 @@ threading.Thread(target=stream_serial_data, daemon=True).start()
 class WheelTracker:
     def __init__(self, sensitivity=1.0):
         self.sensitivity = sensitivity
-        self.total_rotation = 0.0
+        self.total_rotation = 50.0
         self.last_angle = None
 
     def update(self, current_angle):
@@ -187,7 +221,7 @@ def map_to_axis(value):
 
 def map_to_axis_two(value): # 100 - 0
     value /= 100
-    value = value * 1.2 - 0.1  # stretch range, then shift down
+    value = value * (1+deadzone/2) - deadzone  # stretch range, then shift down
     value = max(0.0, min(value, 1.0))  # clamp to 0–1
     value = 1.0 - value  # invert (0 = full press)
     return int(value * 32767)
@@ -198,26 +232,39 @@ print(Fore.RED + "Starting, dont move please")
 time.sleep(5)
 print(Fore.RESET + "Sending joystick input... (Ctrl+C to stop)")
 print(Fore.GREEN + "HOLD ALL PEDALS FULLY DOWN FOR 1 SEC TO CALIBRATE")
+time.sleep(2)
 last = time.time()
 i = 0
 try:
     while True:
+        render=False
         i+=1
         time.sleep(0.001)
         fps = 1 / (time.time() - last + 1e-10)
-        if i % 1000 == 0:
+        if i % 10 == 0:    
             os.system("cls")
+            render=True
             print(Fore.GREEN + f"FPS: {fps:.2f}")
         last = time.time()
 
         wheel_tracker.update(ypr_angle)
         rot = wheel_tracker.get_total_rotation()
         val = map_to_axis(rot)
+        
+        if render:
+            render_progress_bar("W",rot,50,60)
+            print("")
+
         j.set_axis(pyvjoy.HID_USAGE_X, val)  # Wheel → X axis
 
         handle_tilt_buttons()
 
         with lock:
+            if render:
+                render_progress_bar("C",smoothed_kupplung,kupplung,30)
+                render_progress_bar("B",smoothed_bremse,bremse,30)
+                render_progress_bar("A",smoothed_gas,gas,30)
+
             j.set_axis(pyvjoy.HID_USAGE_Y, map_to_axis_two(smoothed_gas))       # Gas → Y axis
             j.set_axis(pyvjoy.HID_USAGE_Z, map_to_axis_two(smoothed_bremse))    # Brake → Z axis
             j.set_axis(pyvjoy.HID_USAGE_RX, map_to_axis_two(smoothed_kupplung)) # Clutch → RX axis
