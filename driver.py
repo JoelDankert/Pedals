@@ -179,7 +179,7 @@ threading.Thread(target=stream_serial_data, daemon=True).start()
 class WheelTracker:
     def __init__(self, sensitivity=1.0):
         self.sensitivity = sensitivity
-        self.total_rotation = 50.0
+        self.total_rotation = 0.0
         self.last_angle = None
 
     def update(self, current_angle):
@@ -260,7 +260,7 @@ try:
         val = map_to_axis(rot)
         
         if render:
-            render_progress_bar("W",rot,50,50)
+            render_progress_bar("W",(rot/180+1)*51,50,50)
             print("")
 
         j.set_axis(pyvjoy.HID_USAGE_X, val)  # Wheel → X axis
