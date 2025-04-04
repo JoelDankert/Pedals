@@ -18,7 +18,50 @@ PI_HOST = "raspihole.local"         # or use IP like "192.168.0.100"
 PI_USER = "ukii"
 PI_PASSWORD = "amogus"             # Or use SSH key
 REMOTE_SCRIPT = "/home/ukii/pedale/main.py"
-PEDAL_SMOOTHING = 0.5  # 0 = no smoothing, 1 = full smoothing (recommended range: 0.1 - 0.5)
+PEDAL_SMOOTHING = 0.8  # 0 = no smoothing, 1 = full smoothing (recommended range: 0.1 - 0.5)
+
+# === TILT BUTTON TRIGGER ===
+TILT_THRESHOLD = 5.0  # degrees
+tilt_start_angle = None
+tilt_pos_button_held = False
+tilt_neg_button_held = False
+TILT_POS_BUTTON_ID = 1  # button for positive tilt
+TILT_NEG_BUTTON_ID = 2  # button for negative tilt
+
+
+def handle_tilt_buttons():
+    global tilt_start_angle, tilt_pos_button_held, tilt_neg_button_held
+
+    if tilt_start_angle is None:
+        tilt_start_angle = tilt_angle  # capture reference angle once
+
+    delta_tilt = tilt_angle - tilt_start_angle
+
+    # Positive tilt
+    if delta_tilt >= TILT_THRESHOLD:
+        if not tilt_pos_button_held:
+            j.set_button(TILT_POS_BUTTON_ID, 1)
+            tilt_pos_button_held = True
+        if tilt_neg_button_held:
+            j.set_button(TILT_NEG_BUTTON_ID, 0)
+            tilt_neg_button_held = False
+    # Negative tilt
+    elif delta_tilt <= -TILT_THRESHOLD:
+        if not tilt_neg_button_held:
+            j.set_button(TILT_NEG_BUTTON_ID, 1)
+            tilt_neg_button_held = True
+        if tilt_pos_button_held:
+            j.set_button(TILT_POS_BUTTON_ID, 0)
+            tilt_pos_button_held = False
+    # Within neutral range
+    else:
+        if tilt_pos_button_held:
+            j.set_button(TILT_POS_BUTTON_ID, 0)
+            tilt_pos_button_held = False
+        if tilt_neg_button_held:
+            j.set_button(TILT_NEG_BUTTON_ID, 0)
+            tilt_neg_button_held = False
+
 
 # === CONNECT SERIAL ===
 print("Connecting to serial...")
@@ -28,10 +71,13 @@ print("Connected.")
 
 # === INIT CALIBRATION ===
 axis_labels = ["Yaw", "Pitch", "Roll"]
-max_idx = 0  # gyro axis to use
+rotindex = 0  # gyro axis to use for rotation
+tiltindex = 1  # gyro axis to access tilt (pitch), not used directly
+
 
 # Shared angle from serial
-ypr_angle = 0.0
+rot_angle = 0.0
+tilt_angle = 0.0
 
 gas = bremse = kupplung = 0.0
 smoothed_gas = smoothed_bremse = smoothed_kupplung = 0.0
@@ -79,14 +125,15 @@ def stream_pedal_data(lock):
 
 # === SERIAL TRACKER ===
 def stream_serial_data():
-    global ypr_angle
+    global ypr_angle, tilt_angle
     while True:
         try:
             line = ser.readline().decode(errors="ignore").strip()
             if line.startswith("[") and line.endswith("]"):
                 ypr = list(map(float, line[1:-1].split(",")))
-                if len(ypr) > max_idx:
-                    ypr_angle = ypr[max_idx] * 180
+                if len(ypr) > max(rotindex, tiltindex):
+                    ypr_angle = ypr[rotindex] * 180
+                    tilt_angle = ypr[tiltindex] * 180  # accessible but unused
         except Exception as e:
             print("Serial error:", e)
         time.sleep(0.001)
@@ -146,9 +193,11 @@ def map_to_axis_two(value): # 100 - 0
     return int(value * 32767)
 
 
-print(Fore.RESET + "Sending joystick input... (Ctrl+C to stop)")
 
-time.sleep(3)
+print(Fore.RED + "Starting, dont move please")
+time.sleep(5)
+print(Fore.RESET + "Sending joystick input... (Ctrl+C to stop)")
+print(Fore.GREEN + "HOLD ALL PEDALS FULLY DOWN FOR 1 SEC TO CALIBRATE")
 last = time.time()
 i = 0
 try:
@@ -165,6 +214,8 @@ try:
         rot = wheel_tracker.get_total_rotation()
         val = map_to_axis(rot)
         j.set_axis(pyvjoy.HID_USAGE_X, val)  # Wheel → X axis
+
+        handle_tilt_buttons()
 
         with lock:
             j.set_axis(pyvjoy.HID_USAGE_Y, map_to_axis_two(smoothed_gas))       # Gas → Y axis
