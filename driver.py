@@ -6,6 +6,7 @@ import pyvjoy
 import paramiko
 import ast
 import threading
+import sys
 import select
 from colorama import init, Fore
 
@@ -33,24 +34,18 @@ TILT_NEG_BUTTON_ID = 2  # button for negative tilt
 
 
 def render_progress_bar(name: str, fill: float, marker: float, bar_width: int = 30):
-    # Clamp values between 0 and 100
     fill = max(0, min(100, fill))
     marker = max(0, min(100, marker))
-
-    # Calculate positions
     fill_length = int(bar_width * fill / 100)
     marker_pos = int(bar_width * marker / 100)
 
-    # ANSI escape codes for background colors
-    GREEN_BG = '\033[42m'  # Green background
-    WHITE_BG = '\033[47m'  # White background
+    GREEN_BG = '\033[42m'
+    WHITE_BG = '\033[47m'
     RESET = '\033[0m'
 
-    # Build the bar
     bar = ""
     for i in range(bar_width):
         if i == marker_pos:
-            # Marker with background color depending on fill
             bg = GREEN_BG if i < fill_length else WHITE_BG
             bar += f"{bg}|{RESET}"
         elif i < fill_length:
@@ -58,9 +53,9 @@ def render_progress_bar(name: str, fill: float, marker: float, bar_width: int = 
         else:
             bar += f"{WHITE_BG} {RESET}"
 
-    # Print result
+    # Overwrite full line
     print(f"{bar} {name}")
-
+  
 
 
 
@@ -243,8 +238,9 @@ try:
         i+=1
         time.sleep(0.001)
         fps = 1 / (time.time() - last + 1e-10)
-        if i % 10 == 0:    
-            os.system("cls")
+        if i % 10 == 0: 
+            sys.stdout.write('\033[H\033[J')  # Move to top-left and clear screen
+            sys.stdout.flush()   
             render=True
             print(Fore.GREEN + f"FPS: {fps:.2f}")
         last = time.time()
@@ -254,7 +250,7 @@ try:
         val = map_to_axis(rot)
         
         if render:
-            render_progress_bar("W",rot,50,60)
+            render_progress_bar("W",rot,50,50)
             print("")
 
         j.set_axis(pyvjoy.HID_USAGE_X, val)  # Wheel → X axis
@@ -263,9 +259,9 @@ try:
 
         with lock:
             if render:
-                render_progress_bar("C",smoothed_kupplung,kupplung,30)
-                render_progress_bar("B",smoothed_bremse,bremse,30)
-                render_progress_bar("A",smoothed_gas,gas,30)
+                render_progress_bar("C",smoothed_kupplung,kupplung,50)
+                render_progress_bar("B",smoothed_bremse,bremse,50)
+                render_progress_bar("A",smoothed_gas,gas,50)
 
             j.set_axis(pyvjoy.HID_USAGE_Y, map_to_axis_two(smoothed_gas))       # Gas → Y axis
             j.set_axis(pyvjoy.HID_USAGE_Z, map_to_axis_two(smoothed_bremse))    # Brake → Z axis
