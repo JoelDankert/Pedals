@@ -9,6 +9,8 @@ import threading
 import select
 from colorama import init, Fore
 
+os.system('')
+
 # === CONFIG ===
 SERIAL_PORT = 'COM7'       # Replace with your Arduino COM port
 BAUD_RATE = 115200         # Match your Arduino sketch
