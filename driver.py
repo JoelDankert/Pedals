@@ -23,15 +23,19 @@ PI_PASSWORD = "amogus"             # Or use SSH key
 REMOTE_SCRIPT = "/home/ukii/pedale/main.py"
 PEDAL_SMOOTHING = 0.8  # 0 = no smoothing, 1 = full smoothing (recommended range: 0.1 - 0.5)
 deadzone = 0.05
+button_states = [0,0,0]
+button_event_states = {
+    0: {'start_time': 0, 'long_active': False, 'short_end_time': 0},
+    1: {'start_time': 0, 'long_active': False, 'short_end_time': 0},
+    2: {'start_time': 0, 'long_active': False, 'short_end_time': 0}
+}
 
-# === TILT BUTTON TRIGGER ===
-TILT_THRESHOLD = 500.0  # degrees
+prev_button_states = [0, 0, 0]
+
+LONG_PRESS_THRESHOLD = 200
+SHORT_PRESS_DURATION = 300
+
 tilt_start_angle = None
-tilt_pos_button_held = False
-tilt_neg_button_held = False
-TILT_POS_BUTTON_ID = 1  # button for positive tilt
-TILT_NEG_BUTTON_ID = 2  # button for negative tilt
-
 
 def render_progress_bar(name: str, fill: float, marker: float, bar_width: int = 30):
     fill = max(0, min(100, fill))
@@ -57,42 +61,6 @@ def render_progress_bar(name: str, fill: float, marker: float, bar_width: int = 
     sys.stdout.write(f"\r{bar} {name}\n")
     sys.stdout.flush()
   
-
-
-
-#beta for sometime
-def handle_tilt_buttons():
-    global tilt_start_angle, tilt_pos_button_held, tilt_neg_button_held
-
-    if tilt_start_angle is None:
-        tilt_start_angle = tilt_angle  # capture reference angle once
-
-    delta_tilt = tilt_angle - tilt_start_angle
-
-    # Positive tilt
-    if delta_tilt >= TILT_THRESHOLD:
-        if not tilt_pos_button_held:
-            j.set_button(TILT_POS_BUTTON_ID, 1)
-            tilt_pos_button_held = True
-        if tilt_neg_button_held:
-            j.set_button(TILT_NEG_BUTTON_ID, 0)
-            tilt_neg_button_held = False
-    # Negative tilt
-    elif delta_tilt <= -TILT_THRESHOLD:
-        if not tilt_neg_button_held:
-            j.set_button(TILT_NEG_BUTTON_ID, 1)
-            tilt_neg_button_held = True
-        if tilt_pos_button_held:
-            j.set_button(TILT_POS_BUTTON_ID, 0)
-            tilt_pos_button_held = False
-    # Within neutral range
-    else:
-        if tilt_pos_button_held:
-            j.set_button(TILT_POS_BUTTON_ID, 0)
-            tilt_pos_button_held = False
-        if tilt_neg_button_held:
-            j.set_button(TILT_NEG_BUTTON_ID, 0)
-            tilt_neg_button_held = False
 
 
 # === CONNECT SERIAL ===
@@ -157,18 +125,32 @@ def stream_pedal_data(lock):
 
 # === SERIAL TRACKER ===
 def stream_serial_data():
-    global ypr_angle, tilt_angle
+    global ypr_angle, tilt_angle, button_states
     while True:
         try:
             line = ser.readline().decode(errors="ignore").strip()
-            if line.startswith("[") and line.endswith("]"):
-                ypr = list(map(float, line[1:-1].split(",")))
-                if len(ypr) > max(rotindex, tiltindex):
-                    ypr_angle = ypr[rotindex] * 180
-                    tilt_angle = ypr[tiltindex] * 180  # accessible but unused
+            # Expecting a line like "[yaw,pitch,roll],[btn1,btn2,btn3]"
+            if line.startswith("[") and "],[" in line and line.endswith("]"):
+                # Remove the first [ and last ] then split by "],["
+                content = line[1:-1]
+                parts = content.split("],[")
+                if len(parts) == 2:
+                    # Parse the orientation values
+                    ypr = list(map(float, parts[0].split(",")))
+                    # Parse the button states (convert them to integers)
+                    buttons = list(map(int, parts[1].split(",")))
+                    
+                    # Check if the expected indexes are present
+                    if len(ypr) > max(rotindex, tiltindex):
+                        ypr_angle = ypr[rotindex] * 180  # assuming conversion factor, as before
+                        tilt_angle = ypr[tiltindex] * 180  # accessible but unused
+                        
+                    # Update the button_states global variable
+                    button_states = buttons
         except Exception as e:
             print("Serial error:", e)
         time.sleep(0.001)
+
 
 # === INIT THREADS ===
 lock = threading.Lock()
@@ -224,6 +206,49 @@ def map_to_axis_two(value): # 100 - 0
     value = 1.0 - value  # invert (0 = full press)
     return int(value * 32767)
 
+def process_button_events():
+    global prev_button_states
+    current_time = time.time() * 1000  # current time in milliseconds
+    for i in range(3):
+        current_state = button_states[i]  # current reading: 1 if pressed, 0 if released
+        
+        # Detect rising edge: button just pressed
+        if current_state == 1 and prev_button_states[i] == 0:
+            button_event_states[i]['start_time'] = current_time
+            button_event_states[i]['long_active'] = False
+            # Ensure both potential events are off initially
+            j.set_button(1 + i, False)  # short press button
+            j.set_button(4 + i, False)  # long press button
+        
+        # While the button is held down
+        if current_state == 1:
+            duration = current_time - button_event_states[i]['start_time']
+            # If we've passed the long press threshold and haven't activated the long event yet
+            if duration >= LONG_PRESS_THRESHOLD and not button_event_states[i]['long_active']:
+                j.set_button(4 + i, True)  # Activate long press event
+                button_event_states[i]['long_active'] = True
+        
+        # Detect falling edge: button just released
+        if current_state == 0 and prev_button_states[i] == 1:
+            duration = current_time - button_event_states[i]['start_time']
+            if duration < LONG_PRESS_THRESHOLD:
+                # For any press shorter than the long press threshold, trigger short press event
+                j.set_button(1 + i, True)
+                button_event_states[i]['short_end_time'] = current_time + SHORT_PRESS_DURATION
+            else:
+                # If it was a long press, immediately turn off the long press event
+                if button_event_states[i]['long_active']:
+                    j.set_button(4 + i, False)
+                    button_event_states[i]['long_active'] = False
+        
+        # Manage the expiration of a short press event:
+        # If a short press event is active (tracked via short_end_time) and its duration has passed, turn it off.
+        if button_event_states[i]['short_end_time'] and current_time >= button_event_states[i]['short_end_time']:
+            j.set_button(1 + i, False)
+            button_event_states[i]['short_end_time'] = 0
+        
+        # Update the previous state for the next iteration
+        prev_button_states[i] = current_state
 
 
 print(Fore.RED + "Starting, dont move please")
@@ -244,14 +269,14 @@ sys.stdout.flush()
 
 try:
     while True:
-        render=False
-        i+=1
-        time.sleep(0.001)
+        render = False
+        i += 1
+        time.sleep(0.0005)
         fps = 1 / (time.time() - last + 1e-10)
         if i % 10 == 0: 
             sys.stdout.write('\033[F' * 6)  # Move up 
             sys.stdout.flush()
-            render=True
+            render = True
             print(Fore.GREEN + f"FPS: {fps:.2f}")
         last = time.time()
 
@@ -260,23 +285,24 @@ try:
         val = map_to_axis(rot)
         
         if render:
-            render_progress_bar("W",(rot/180+1)*51,50,50)
+            render_progress_bar("W", (rot/180+1)*51, 50, 50)
             print("")
 
         j.set_axis(pyvjoy.HID_USAGE_X, val)  # Wheel → X axis
-
-        handle_tilt_buttons()
+        
+        process_button_events()
 
         with lock:
             if render:
-                render_progress_bar("C",smoothed_kupplung,kupplung,50)
-                render_progress_bar("B",smoothed_bremse,bremse,50)
-                render_progress_bar("A",smoothed_gas,gas,50)
+                render_progress_bar("C", smoothed_kupplung, kupplung, 50)
+                render_progress_bar("B", smoothed_bremse, bremse, 50)
+                render_progress_bar("A", smoothed_gas, gas, 50)
 
             j.set_axis(pyvjoy.HID_USAGE_Y, map_to_axis_two(smoothed_gas))       # Gas → Y axis
-            j.set_axis(pyvjoy.HID_USAGE_Z, map_to_axis_two(smoothed_bremse))    # Brake → Z axis
-            j.set_axis(pyvjoy.HID_USAGE_RX, map_to_axis_two(smoothed_kupplung)) # Clutch → RX axis
-
+            j.set_axis(pyvjoy.HID_USAGE_Z, map_to_axis_two(smoothed_bremse))      # Brake → Z axis
+            j.set_axis(pyvjoy.HID_USAGE_RX, map_to_axis_two(smoothed_kupplung))    # Clutch → RX axis
+            
+            
 
 except KeyboardInterrupt:
     print("\nStopped.")
