@@ -171,6 +171,9 @@ class WheelTracker:
 
         delta = current_angle - self.last_angle
 
+        if delta > 10:
+            return
+
         if delta > 180:
             delta -= 360
         elif delta < -180:
