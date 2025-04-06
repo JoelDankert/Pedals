@@ -177,17 +177,14 @@ class WheelTracker:
             delta += 360
             
 
-        if delta > 10:
-            return
-
             
         self.total_rotation += delta * self.sensitivity
-        self.total_rotation = max(min(self.total_rotation, 179), -179)
+        #self.total_rotation = max(min(self.total_rotation, 179), -179)
 
         self.last_angle = current_angle
 
     def get_total_rotation(self):
-        return self.total_rotation
+        return max(min(self.total_rotation, 179), -179)
 
     def reset(self):
         self.total_rotation = 0.0
