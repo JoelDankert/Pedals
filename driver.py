@@ -8,6 +8,7 @@ import ast
 import threading
 import sys
 import select
+import msvcrt
 from colorama import init, Fore
 
 os.system('')
@@ -21,7 +22,7 @@ PI_HOST = "raspihole.local"         # or use IP like "192.168.0.100"
 PI_USER = "ukii"
 PI_PASSWORD = "amogus"             # Or use SSH key
 REMOTE_SCRIPT = "/home/ukii/pedale/main.py"
-PEDAL_SMOOTHING = 0.8  # 0 = no smoothing, 1 = full smoothing (recommended range: 0.1 - 0.5)
+PEDAL_SMOOTHING = 0.4  # 0 = no smoothing, 1 = full smoothing (recommended range: 0.1 - 0.5)
 deadzone = 0.05
 button_states = [0,0,0]
 button_event_states = {
@@ -293,6 +294,10 @@ try:
         j.set_axis(pyvjoy.HID_USAGE_X, val)  # Wheel → X axis
         
         process_button_events()
+
+        if msvcrt.kbhit() and msvcrt.getch() == b' ':
+            wheel_tracker.reset()
+
 
         with lock:
             if render:
