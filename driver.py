@@ -78,7 +78,6 @@ tiltindex = 1  # gyro axis to access tilt (pitch), not used directly
 
 # Shared angle from serial
 rot_angle = 0.0
-tilt_angle = 0.0
 
 gas = bremse = kupplung = 0.0
 smoothed_gas = smoothed_bremse = smoothed_kupplung = 0.0
@@ -126,7 +125,7 @@ def stream_pedal_data(lock):
 
 # === SERIAL TRACKER ===
 def stream_serial_data():
-    global ypr_angle, tilt_angle, button_states
+    global ypr_angle, button_states
     while True:
         try:
             line = ser.readline().decode(errors="ignore").strip()
@@ -144,7 +143,6 @@ def stream_serial_data():
                     # Check if the expected indexes are present
                     if len(ypr) > max(rotindex, tiltindex):
                         ypr_angle = ypr[rotindex] * 180  # assuming conversion factor, as before
-                        tilt_angle = ypr[tiltindex] * 180  # accessible but unused
                         
                     # Update the button_states global variable
                     button_states = buttons
