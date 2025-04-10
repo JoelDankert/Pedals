@@ -82,8 +82,17 @@ rot_angle = 0.0
 gas = bremse = kupplung = 0.0
 smoothed_gas = smoothed_bremse = smoothed_kupplung = 0.0
 
-def smooth(prev, new, factor):
-    return prev * factor + new * (1 - factor)
+def smooth(prev, new, factor, man_alpha=0.1, max_alpha=0.9):
+    delta = abs(new - prev)
+
+    # Normalize delta to [0, 1] range based on factor (expected max 'noise' level)
+    normalized = min(delta / factor, 1.0)
+
+    # Compute dynamic alpha: small delta => low alpha (more smoothing), large delta => high alpha (less smoothing)
+    alpha = man_alpha + (max_alpha - man_alpha) * normalized
+
+    # Apply smoothing
+    return (1 - alpha) * prev + alpha * new
 
 def stream_pedal_data(lock):
     global gas, bremse, kupplung
