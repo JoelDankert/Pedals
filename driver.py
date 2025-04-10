@@ -22,7 +22,7 @@ PI_HOST = "raspihole.local"         # or use IP like "192.168.0.100"
 PI_USER = "ukii"
 PI_PASSWORD = "amogus"             # Or use SSH key
 REMOTE_SCRIPT = "/home/ukii/pedale/main.py"
-PEDAL_SMOOTHING = 0.4  # 0 = no smoothing, 1 = full smoothing (recommended range: 0.1 - 0.5)
+PEDAL_SMOOTHING = 1
 deadzone = 0.05
 button_states = [0,0,0]
 button_event_states = {
@@ -82,7 +82,7 @@ rot_angle = 0.0
 gas = bremse = kupplung = 0.0
 smoothed_gas = smoothed_bremse = smoothed_kupplung = 0.0
 
-def smooth(prev, new, factor, man_alpha=0.1, max_alpha=0.9):
+def smooth(prev, new, factor, man_alpha=0.1, max_alpha=0.3):
     delta = abs(new - prev)
 
     # Normalize delta to [0, 1] range based on factor (expected max 'noise' level)
